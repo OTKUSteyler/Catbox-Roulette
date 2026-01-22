@@ -3,12 +3,13 @@ import { findByProps } from "@vendetta/metro";
 
 const messageUtil = findByProps("sendMessage", "editMessage");
 
-// Self-contained random Catbox guessing
 const EXTENSIONS = ["png", "jpg", "webp"];
 const CHARS = "abcdefghijklmnopqrstuvwxyz0123456789";
 
-async function getRandomCatboxLink(maxAttempts = 400) {
-  for (let i = 0; i < maxAttempts; i++) {
+async function getRandomCatboxLink() {
+  const maxAttempts = 600; // More attempts for better odds
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     let code = "";
     for (let j = 0; j < 6; j++) {
       code += CHARS.charAt(Math.floor(Math.random() * CHARS.length));
@@ -25,32 +26,31 @@ async function getRandomCatboxLink(maxAttempts = 400) {
           return url;
         }
       }
-    } catch {}
+    } catch (e) {
+      // Silent ignore
+    }
 
-    // Delay to avoid rate-limit ban
-    await new Promise(r => setTimeout(r, 700 + Math.random() * 800));
+    // Short polite delay
+    await new Promise(r => setTimeout(r, 500 + Math.random() * 500));
   }
+
   return null;
 }
 
 const cmd = registerCommand({
   name: "catbox",
   displayName: "Catbox Roulette",
-  description: "Sends a random Catbox link in chat",
-  displayDescription: "Sends a random Catbox link in chat",
+  description: "Sends random Catbox link",
   options: [],
   execute: async (_, ctx) => {
     const link = await getRandomCatboxLink();
 
-    if (!link) {
-      // Fallback: send failure as normal message too (or remove if unwanted)
-      messageUtil.sendMessage(ctx.channel.id, { content: "No valid Catbox link found after tries. Try again!" });
-      return;
+    if (link) {
+      const nonce = Date.now().toString();
+      messageUtil.sendMessage(ctx.channel.id, { content: link }, undefined, { nonce });
+    } else {
+      messageUtil.sendMessage(ctx.channel.id, { content: "Couldn't find a Catbox link this time. Try again." });
     }
-
-    // Send as normal user message (no bot tag)
-    const nonce = Date.now().toString(); // Helps with slash command quirks
-    messageUtil.sendMessage(ctx.channel.id, { content: link }, undefined, { nonce });
   },
   applicationId: "-1",
   inputType: 1,
