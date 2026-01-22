@@ -3,85 +3,68 @@ import { findByProps } from "@vendetta/metro";
 import { showToast } from "@vendetta/toasts";
 
 const { sendBotMessage } = findByProps("sendBotMessage");
+const messageUtil = findByProps("sendMessage", "editMessage");
 
-// Self-contained – no external files needed
-const EXTENSIONS = ["png", "jpg", "webp"]; // Best hit rates on Catbox
+// Self-contained random Catbox logic
+const EXTENSIONS = ["png", "jpg", "webp"];
 const CHARS = "abcdefghijklmnopqrstuvwxyz0123456789";
 
 async function getRandomCatboxLink() {
-  const maxAttempts = 450; // Balanced – usually finds something in <300 tries
-  const triedCodes = new Set<string>();
+  const maxAttempts = 400;
+  const tried = new Set();
 
-  showToast({ content: "Rolling Catbox roulette... (1–5 min max)", type: "info" });
+  showToast({ content: "Rolling for Catbox link...", type: "info" });
 
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    let code: string;
-    do {
-      code = Array(6).fill(0).map(() => 
-        CHARS.charAt(Math.floor(Math.random() * CHARS.length))
-      ).join("");
-    } while (triedCodes.has(code));
-    triedCodes.add(code);
+  for (let i = 0; i < maxAttempts; i++) {
+    let code = Array(6).fill(0).map(() => CHARS.charAt(Math.floor(Math.random() * 36))).join("");
+    while (tried.has(code)) {
+      code = Array(6).fill(0).map(() => CHARS.charAt(Math.floor(Math.random() * 36))).join("");
+    }
+    tried.add(code);
 
-    // Random extension each time for variety
     const ext = EXTENSIONS[Math.floor(Math.random() * EXTENSIONS.length)];
     const url = `https://files.catbox.moe/${code}.${ext}`;
 
     try {
-      const res = await fetch(url, { 
-        method: "HEAD", 
-        redirect: "follow",
-        cache: "no-store" // Avoid caching false negatives
-      });
-
+      const res = await fetch(url, { method: "HEAD", redirect: "follow" });
       if (res.ok) {
         const ct = res.headers.get("content-type") || "";
-        if (ct.includes("image/")) { // Catbox images most common
+        if (ct.includes("image/")) {
           return url;
         }
       }
-    } catch {
-      // Network/error → skip
-    }
+    } catch {}
 
-    // Polite random delay: 0.8–1.6 seconds
-    await new Promise(r => setTimeout(r, 800 + Math.random() * 800));
+    await new Promise(r => setTimeout(r, 700 + Math.random() * 800));
   }
-
   return null;
 }
 
-const cmd = registerCommand({
+const command = registerCommand({
   name: "catbox",
   displayName: "Catbox Roulette",
-  description: "Gets random Catbox link & copies to clipboard",
-  displayDescription: "Gets random Catbox link & copies to clipboard",
+  description: "Random Catbox image → sends to chat & copies to clipboard",
+  displayDescription: "Random Catbox image → sends to chat & copies to clipboard",
   options: [],
   execute: async (_, ctx) => {
     const link = await getRandomCatboxLink();
 
     if (!link) {
-      showToast({
-        content: "Didn't find anything after 450 rolls – try again!",
-        type: "failure"
-      });
+      showToast({ content: "No link found after tries – try again", type: "failure" });
+      sendBotMessage(ctx.channel.id, "Couldn't find a valid Catbox link. Try again.");
       return;
     }
 
+    // Send to chat like KonoChan does
+    const nonce = Date.now().toString();
+    messageUtil.sendMessage(ctx.channel.id, { content: link }, undefined, { nonce });
+
+    // Copy to clipboard
     try {
       await navigator.clipboard.writeText(link);
-      showToast({
-        content: `Copied to clipboard: ${link}`,
-        type: "success"
-      });
-
-      // Uncomment next 3 lines if you ALSO want to send it in chat
-      // const nonce = Date.now().toString();
-      // const sendMsg = findByProps("sendMessage");
-      // sendMsg.sendMessage(ctx.channel.id, { content: link }, undefined, { nonce });
-    } catch (e) {
-      showToast({ content: `Found but copy failed: ${link}`, type: "failure" });
-      sendBotMessage(ctx.channel.id, `Found (copy failed): ${link}`);
+      showToast({ content: `Sent & copied: ${link}`, type: "success" });
+    } catch {
+      showToast({ content: `Sent but copy failed: ${link}`, type: "warning" });
     }
   },
   applicationId: "-1",
@@ -89,4 +72,4 @@ const cmd = registerCommand({
   type: 1,
 });
 
-export default cmd;
+export default command;
