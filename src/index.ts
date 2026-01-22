@@ -1,69 +1,87 @@
 import { registerCommand } from "@vendetta/commands";
 import { findByProps } from "@vendetta/metro";
-import { showToast } from "@vendetta/toasts";  // For nice feedback (optional but recommended)
+import { showToast } from "@vendetta/toasts";
 
 const { sendBotMessage } = findByProps("sendBotMessage");
-const messageUtil = findByProps("sendMessage", "editMessage");
 
-// Define here to avoid undefined errors
-const EXTENSIONS = ["png", "jpg", "webp", "gif"];
+// All in one place – no separate file, no undefined variables
+const EXTENSIONS = ["png", "jpg", "webp"]; // Highest hit-rate – focus here
 const CHARS = "abcdefghijklmnopqrstuvwxyz0123456789";
 
-async function getRandomCatboxUrl(maxAttempts = 250) {
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+async function findRandomCatboxLink() {
+  const maxAttempts = 400; // Enough to get hits in most runs without being too slow
+  const tried = new Set();
+
+  showToast({ content: "Searching Catbox... (may take 1–4 minutes)", type: "info" });
+
+  for (let i = 0; i < maxAttempts; i++) {
     let code = "";
-    for (let j = 0; j < 6; j++) {
-      code += CHARS.charAt(Math.floor(Math.random() * CHARS.length));
+    do {
+      code = "";
+      for (let j = 0; j < 6; j++) {
+        code += CHARS.charAt(Math.floor(Math.random() * 36));
+      }
+    } while (tried.has(code));
+    tried.add(code);
+
+    for (const ext of EXTENSIONS) {
+      const url = `https://files.catbox.moe/\( {code}. \){ext}`;
+
+      try {
+        const response = await fetch(url, { method: "HEAD", redirect: "follow" });
+        if (response.ok) {
+          const contentType = response.headers.get("content-type") || "";
+          if (contentType.includes("image/")) {
+            return url;
+          }
+        }
+      } catch {
+        // silent fail
+      }
+
+      // Be very polite – 0.7–1.5 sec delay per check
+      await new Promise(resolve => setTimeout(resolve, 700 + Math.random() * 800));
     }
 
-    const ext = EXTENSIONS[Math.floor(Math.random() * EXTENSIONS.length)];
-    const url = `https://files.catbox.moe/\( {code}. \){ext}`;
-
-    try {
-      const res = await fetch(url, { method: "HEAD", redirect: "follow" });
-      if (res.ok) {
-        const ct = res.headers.get("content-type") || "";
-        if (ct.includes("image/") || ct.includes("video/")) {
-          return url;
-        }
-      }
-    } catch {}
-
-    // Delay to be polite
-    await new Promise(r => setTimeout(r, 500 + Math.random() * 600));
+    // Small extra pause every 40 attempts
+    if (i % 40 === 0 && i > 0) {
+      await new Promise(resolve => setTimeout(resolve, 4000));
+    }
   }
+
   return null;
 }
 
-const command = registerCommand({
+let catboxRouletteCommand = registerCommand({
   name: "catbox",
   displayName: "Catbox Roulette",
-  description: "Finds a random Catbox link and copies it to clipboard",
-  displayDescription: "Finds a random Catbox link and copies it to clipboard",
+  description: "Finds random Catbox image link & copies to clipboard",
+  displayDescription: "Finds random Catbox image link & copies to clipboard",
   options: [],
   execute: async (_, ctx) => {
-    const url = await getRandomCatboxUrl();
+    const link = await findRandomCatboxLink();
 
-    if (!url) {
-      showToast({ content: "No valid link found after tries. Try again!", type: "failure" });
-      // Or fallback: sendBotMessage(ctx.channel.id, "No valid link found. Try again.");
+    if (!link) {
+      showToast({
+        content: "No link found after 400 tries – Catbox is huge & sparse. Try again!",
+        type: "failure"
+      });
       return;
     }
 
     try {
-      await navigator.clipboard.writeText(url);
-      showToast({ 
-        content: "Copied to clipboard! " + url, 
-        type: "success" 
+      await navigator.clipboard.writeText(link);
+      showToast({
+        content: `Copied! ${link}`,
+        type: "success"
       });
-      
-      // Optional: still send in chat
+
+      // Optional: also send it (uncomment if you want)
       // const nonce = Date.now().toString();
-      // messageUtil.sendMessage(ctx.channel.id, { content: url }, undefined, { nonce });
+      // findByProps("sendMessage").sendMessage(ctx.channel.id, { content: link }, undefined, { nonce });
     } catch (err) {
-      showToast({ content: "Copy failed: " + err.message, type: "failure" });
-      // Fallback: send anyway if copy fails
-      sendBotMessage(ctx.channel.id, "Found but copy failed: " + url);
+      showToast({ content: `Found but copy failed: ${link}`, type: "failure" });
+      sendBotMessage(ctx.channel.id, `Found (copy failed): ${link}`);
     }
   },
   applicationId: "-1",
@@ -71,4 +89,4 @@ const command = registerCommand({
   type: 1,
 });
 
-export default command;
+export default catboxRouletteCommand;
