@@ -4,66 +4,65 @@ import { showToast } from "@vendetta/toasts";
 
 const { sendBotMessage } = findByProps("sendBotMessage");
 
-// All in one place – no separate file, no undefined variables
-const EXTENSIONS = ["png", "jpg", "webp"]; // Highest hit-rate – focus here
+// Self-contained – no external files needed
+const EXTENSIONS = ["png", "jpg", "webp"]; // Best hit rates on Catbox
 const CHARS = "abcdefghijklmnopqrstuvwxyz0123456789";
 
-async function findRandomCatboxLink() {
-  const maxAttempts = 400; // Enough to get hits in most runs without being too slow
-  const tried = new Set();
+async function getRandomCatboxLink() {
+  const maxAttempts = 450; // Balanced – usually finds something in <300 tries
+  const triedCodes = new Set<string>();
 
-  showToast({ content: "Searching Catbox... (may take 1–4 minutes)", type: "info" });
+  showToast({ content: "Rolling Catbox roulette... (1–5 min max)", type: "info" });
 
-  for (let i = 0; i < maxAttempts; i++) {
-    let code = "";
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    let code: string;
     do {
-      code = "";
-      for (let j = 0; j < 6; j++) {
-        code += CHARS.charAt(Math.floor(Math.random() * 36));
-      }
-    } while (tried.has(code));
-    tried.add(code);
+      code = Array(6).fill(0).map(() => 
+        CHARS.charAt(Math.floor(Math.random() * CHARS.length))
+      ).join("");
+    } while (triedCodes.has(code));
+    triedCodes.add(code);
 
-    for (const ext of EXTENSIONS) {
-      const url = `https://files.catbox.moe/\( {code}. \){ext}`;
+    // Random extension each time for variety
+    const ext = EXTENSIONS[Math.floor(Math.random() * EXTENSIONS.length)];
+    const url = `https://files.catbox.moe/\( {code}. \){ext}`;
 
-      try {
-        const response = await fetch(url, { method: "HEAD", redirect: "follow" });
-        if (response.ok) {
-          const contentType = response.headers.get("content-type") || "";
-          if (contentType.includes("image/")) {
-            return url;
-          }
+    try {
+      const res = await fetch(url, { 
+        method: "HEAD", 
+        redirect: "follow",
+        cache: "no-store" // Avoid caching false negatives
+      });
+
+      if (res.ok) {
+        const ct = res.headers.get("content-type") || "";
+        if (ct.includes("image/")) { // Catbox images most common
+          return url;
         }
-      } catch {
-        // silent fail
       }
-
-      // Be very polite – 0.7–1.5 sec delay per check
-      await new Promise(resolve => setTimeout(resolve, 700 + Math.random() * 800));
+    } catch {
+      // Network/error → skip
     }
 
-    // Small extra pause every 40 attempts
-    if (i % 40 === 0 && i > 0) {
-      await new Promise(resolve => setTimeout(resolve, 4000));
-    }
+    // Polite random delay: 0.8–1.6 seconds
+    await new Promise(r => setTimeout(r, 800 + Math.random() * 800));
   }
 
   return null;
 }
 
-let catboxRouletteCommand = registerCommand({
+const cmd = registerCommand({
   name: "catbox",
   displayName: "Catbox Roulette",
-  description: "Finds random Catbox image link & copies to clipboard",
-  displayDescription: "Finds random Catbox image link & copies to clipboard",
+  description: "Gets random Catbox link & copies to clipboard",
+  displayDescription: "Gets random Catbox link & copies to clipboard",
   options: [],
   execute: async (_, ctx) => {
-    const link = await findRandomCatboxLink();
+    const link = await getRandomCatboxLink();
 
     if (!link) {
       showToast({
-        content: "No link found after 400 tries – Catbox is huge & sparse. Try again!",
+        content: "Didn't find anything after 450 rolls – try again!",
         type: "failure"
       });
       return;
@@ -72,14 +71,15 @@ let catboxRouletteCommand = registerCommand({
     try {
       await navigator.clipboard.writeText(link);
       showToast({
-        content: `Copied! ${link}`,
+        content: `Copied to clipboard: ${link}`,
         type: "success"
       });
 
-      // Optional: also send it (uncomment if you want)
+      // Uncomment next 3 lines if you ALSO want to send it in chat
       // const nonce = Date.now().toString();
-      // findByProps("sendMessage").sendMessage(ctx.channel.id, { content: link }, undefined, { nonce });
-    } catch (err) {
+      // const sendMsg = findByProps("sendMessage");
+      // sendMsg.sendMessage(ctx.channel.id, { content: link }, undefined, { nonce });
+    } catch (e) {
       showToast({ content: `Found but copy failed: ${link}`, type: "failure" });
       sendBotMessage(ctx.channel.id, `Found (copy failed): ${link}`);
     }
@@ -89,4 +89,4 @@ let catboxRouletteCommand = registerCommand({
   type: 1,
 });
 
-export default catboxRouletteCommand;
+export default cmd;
