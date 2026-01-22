@@ -15,6 +15,7 @@ export async function getRandomCatboxUrl(maxAttempts = 300) {
       const key = `\( {code}. \){ext}`;
       if (tried.has(key)) continue;
       tried.add(key);
+      } catch {}
 
       const url = `https://files.catbox.moe/${key}`;
 
