@@ -88,33 +88,17 @@ export default {
       name: "catbox",
       displayName: "Catbox Roulette",
       description: "Finds and sends a random valid Catbox file",
-      options: [
-        {
-          name: "attempts",
-          displayName: "Max Attempts",
-          description: "Maximum attempts to find a valid file (default: 100)",
-          required: false,
-          type: 4,
-        }
-      ],
+      options: [],
       execute: async (args, ctx) => {
-        const maxAttempts = Math.max(10, Math.min(200, args[0]?.value || 100));
-        
-        messageUtil.sendMessage(ctx.channel.id, { 
-          content: `🎲 Searching for a valid Catbox file (max ${maxAttempts} attempts)...` 
-        });
-        
-        const startTime = Date.now();
-        const result = await findValidCatboxUrl(maxAttempts);
-        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+        const result = await findValidCatboxUrl(100);
         
         if (result) {
           messageUtil.sendMessage(ctx.channel.id, { 
-            content: `✅ Found one in ${result.attempts} attempts (${duration}s)!\n${result.url}` 
+            content: result.url 
           });
         } else {
           messageUtil.sendMessage(ctx.channel.id, { 
-            content: `❌ No valid file found after ${maxAttempts} attempts (${duration}s).\n\nTip: The odds are very low (~0.05% per try). You might want to try again or increase attempts!` 
+            content: `❌ Couldn't find a valid Catbox file. Try again!` 
           });
         }
       },
@@ -131,3 +115,4 @@ export default {
   }
 };
 
+ */
