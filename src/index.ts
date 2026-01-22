@@ -2,35 +2,79 @@ import { registerCommand } from "@vendetta/commands";
 import { findByProps } from "@vendetta/metro";
 
 const messageUtil = findByProps("sendMessage", "editMessage");
-const EXTENSIONS = ["png", "jpg", "webp"];
+
+const EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "mp4", "webm", "mov"];
 const CHARS = "abcdefghijklmnopqrstuvwxyz0123456789";
 
-async function getRandomCatboxLink() {
-  const maxAttempts = 100; // Reduced to avoid rate limiting
+// CORS proxies to bypass browser restrictions
+const CORS_PROXIES = [
+  "https://corsproxy.io/?",
+  "https://api.allorigins.win/raw?url=",
+];
+
+let currentProxyIndex = 0;
+
+function generateRandomCatboxUrl() {
+  let code = "";
+  for (let i = 0; i < 6; i++) {
+    code += CHARS.charAt(Math.floor(Math.random() * CHARS.length));
+  }
   
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    let code = "";
-    for (let j = 0; j < 6; j++) {
-      code += CHARS.charAt(Math.floor(Math.random() * CHARS.length));
-    }
+  const ext = EXTENSIONS[Math.floor(Math.random() * EXTENSIONS.length)];
+  return `https://files.catbox.moe/${code}.${ext}`;
+}
+
+async function checkIfExists(url) {
+  const proxy = CORS_PROXIES[currentProxyIndex];
+  const proxyUrl = proxy + encodeURIComponent(url);
+  
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
+  
+  try {
+    const response = await fetch(proxyUrl, {
+      method: "HEAD",
+      signal: controller.signal,
+    });
     
-    const ext = EXTENSIONS[Math.floor(Math.random() * EXTENSIONS.length)];
-    const url = `https://files.catbox.moe/${code}.${ext}`;
+    clearTimeout(timeoutId);
     
-    try {
-      const res = await fetch(url, { method: "HEAD", redirect: "follow" });
-      if (res.ok) {
-        const ct = res.headers.get("content-type") || "";
-        if (ct.includes("image/") || ct.includes("video/")) {
-          return url;
-        }
+    if (response.ok) {
+      const contentType = response.headers.get("content-type") || "";
+      const contentLength = response.headers.get("content-length");
+      
+      // Check if it's actual media content with reasonable size
+      if ((contentType.includes("image/") || 
+           contentType.includes("video/") ||
+           contentType.includes("octet-stream")) &&
+          contentLength && parseInt(contentLength) > 1000) {
+        return true;
       }
-    } catch (e) {
-      // Silent ignore
+    }
+  } catch (e) {
+    clearTimeout(timeoutId);
+    // Try next proxy on failure
+    if (e.name === "AbortError" || e.message.includes("fetch")) {
+      currentProxyIndex = (currentProxyIndex + 1) % CORS_PROXIES.length;
+    }
+  }
+  
+  return false;
+}
+
+async function findValidCatboxUrl(maxAttempts = 100) {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const url = generateRandomCatboxUrl();
+    
+    const exists = await checkIfExists(url);
+    if (exists) {
+      return { url, attempts: attempt + 1 };
     }
     
-    // Increased delay to be more respectful
-    await new Promise(r => setTimeout(r, 1000));
+    // Small delay every 10 attempts
+    if (attempt > 0 && attempt % 10 === 0) {
+      await new Promise(r => setTimeout(r, 500));
+    }
   }
   
   return null;
@@ -43,15 +87,34 @@ export default {
     unregisterCommand = registerCommand({
       name: "catbox",
       displayName: "Catbox Roulette",
-      description: "Sends random Catbox link",
-      options: [],
-      execute: async (_, ctx) => {
-        const link = await getRandomCatboxLink();
-        if (link) {
-          messageUtil.sendMessage(ctx.channel.id, { content: link });
+      description: "Finds and sends a random valid Catbox file",
+      options: [
+        {
+          name: "attempts",
+          displayName: "Max Attempts",
+          description: "Maximum attempts to find a valid file (default: 100)",
+          required: false,
+          type: 4,
+        }
+      ],
+      execute: async (args, ctx) => {
+        const maxAttempts = Math.max(10, Math.min(200, args[0]?.value || 100));
+        
+        messageUtil.sendMessage(ctx.channel.id, { 
+          content: `🎲 Searching for a valid Catbox file (max ${maxAttempts} attempts)...` 
+        });
+        
+        const startTime = Date.now();
+        const result = await findValidCatboxUrl(maxAttempts);
+        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+        
+        if (result) {
+          messageUtil.sendMessage(ctx.channel.id, { 
+            content: `✅ Found one in ${result.attempts} attempts (${duration}s)!\n${result.url}` 
+          });
         } else {
           messageUtil.sendMessage(ctx.channel.id, { 
-            content: "Couldn't find a Catbox link this time. Try again." 
+            content: `❌ No valid file found after ${maxAttempts} attempts (${duration}s).\n\nTip: The odds are very low (~0.05% per try). You might want to try again or increase attempts!` 
           });
         }
       },
@@ -67,3 +130,4 @@ export default {
     }
   }
 };
+
