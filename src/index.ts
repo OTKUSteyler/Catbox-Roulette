@@ -79,31 +79,13 @@ export default {
       description: "Sends random Catbox URLs - Discord will load the valid ones!",
       options: [],
       execute: async (args, ctx) => {
-        let count = args[0]?.value || 10;
-        count = Math.max(1, Math.min(20, count));
-        
+        const count = 10;
         const urls = generateBatch(count);
         
-        // Send in chunks to avoid spam
-        if (count <= 5) {
-          messageUtil.sendMessage(ctx.channel.id, { 
-            content: `🎲 Catbox Roulette:\n${urls.join('\n')}` 
-          });
-        } else {
-          // Split into multiple messages for better readability
-          messageUtil.sendMessage(ctx.channel.id, { 
-            content: `🎲 Catbox Roulette (${count} attempts - valid ones will load):`
-          });
-          
-          // Send in chunks of 5
-          for (let i = 0; i < urls.length; i += 5) {
-            const chunk = urls.slice(i, i + 5);
-            await new Promise(r => setTimeout(r, 500));
-            messageUtil.sendMessage(ctx.channel.id, { 
-              content: chunk.join('\n')
-            });
-          }
-        }
+        // Send all URLs in a single message
+        messageUtil.sendMessage(ctx.channel.id, { 
+          content: `🎲 Catbox Roulette (valid ones will load as embeds):\n${urls.join('\n')}`
+        });
       },
       applicationId: "-1",
       inputType: 1,
