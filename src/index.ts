@@ -1,50 +1,33 @@
+// src/index.ts (modified for Catbox)
 import { registerCommand } from "@vendetta/commands";
 import { findByProps } from "@vendetta/metro";
-import { fetchImage } from "./utils";
+import { getRandomCatboxUrl } from "./utils";  // ← new function
 
 const { sendBotMessage } = findByProps("sendBotMessage");
 const messageUtil = findByProps("sendMessage", "editMessage");
 
-let konoSend = registerCommand({
-  name: "konoSend",
-  displayName: "konoSend",
-  description: "Fetch a random image from KonoChan and send it to the channel.",
-  displayDescription: "Fetch a random image from KonoChan and send it to the channel.",
-  options: [
-    {
-      name: "nsfw",
-      description: "Include NSFW content?",
-      type: 5,
-      required: false,
-      displayName: "nsfw",
-      displayDescription: "Include NSFW content?",
-    },
-  ],
+const EXTENSIONS = ["png", "jpg", "webp", "gif", "webm"];
+
+let catboxRoulette = registerCommand({
+  name: "catbox",
+  displayName: "Catbox Roulette",
+  description: "Fetch a random working Catbox.moe link.",
+  displayDescription: "Fetch a random working Catbox.moe link.",
+  options: [],  // no options needed
   execute: async function (args, ctx) {
-    const options = new Map(args.map((option) => [option.name, option]));
-    const isNSFW = options.get("nsfw")?.value || false;
+    const url = await getRandomCatboxUrl();
 
-    // Check if NSFW images are allowed in the channel
-    if (isNSFW && !ctx.channel.nsfw_) {
-      sendBotMessage(ctx.channel.id, "This channel is not marked as NSFW. Use an NSFW channel instead.");
+    if (!url) {
+      sendBotMessage(ctx.channel.id, "Couldn't find a valid link after many tries. Try again later.");
       return;
     }
 
-    const imageUrl = await fetchImage(isNSFW);
-
-    if (!imageUrl) {
-      sendBotMessage(ctx.channel.id, "No image found. Try again later.");
-      return;
-    }
-
-    // Slash command fix: use sendMessage with nonce instead of returning content
     const fixNonce = Date.now().toString();
-    messageUtil.sendMessage(ctx.channel.id, { content: imageUrl }, void 0, { nonce: fixNonce });
+    messageUtil.sendMessage(ctx.channel.id, { content: url }, void 0, { nonce: fixNonce });
   },
-  // @ts-ignore
   applicationId: "-1",
   inputType: 1,
   type: 1,
 });
 
-export default konoSend;
+export default catboxRoulette;
