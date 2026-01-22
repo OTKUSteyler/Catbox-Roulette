@@ -1,30 +1,39 @@
-// src/utils.ts (new or replace existing)
-const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+const EXTENSIONS = ["png", "jpg", "webp", "gif", "webm", "mp4"];
 
-export async function getRandomCatboxUrl(maxAttempts = 80): Promise<string | null> {
-  for (let i = 0; i < maxAttempts; i++) {
+const CHARS = "abcdefghijklmnopqrstuvwxyz0123456789";
+
+export async function getRandomCatboxUrl(maxAttempts = 100): Promise<string | null> {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    // Generate random 6-char code
     let code = "";
-    for (let j = 0; j < 6; j++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    for (let i = 0; i < 6; i++) {
+      code += CHARS.charAt(Math.floor(Math.random() * CHARS.length));
     }
+
+    // Pick random extension
     const ext = EXTENSIONS[Math.floor(Math.random() * EXTENSIONS.length)];
     const url = `https://files.catbox.moe/\( {code}. \){ext}`;
 
     try {
-      const response = await fetch(url, { method: "HEAD", redirect: "follow" });
+      const response = await fetch(url, {
+        method: "HEAD",
+        redirect: "follow",
+        mode: "no-cors", // Helps avoid some CORS issues in plugin env
+      });
+
       if (response.ok) {
         const contentType = response.headers.get("content-type") || "";
         if (contentType.startsWith("image/") || contentType.startsWith("video/")) {
           return url;
         }
       }
-    } catch (e) {
-      // silent fail on network/error
+    } catch {
+      // Ignore network/timeout errors
     }
 
-    // Be nice to their servers
-    await new Promise(r => setTimeout(r, 400 + Math.random() * 300));  // 400-700ms delay
+    // Polite random delay: 500–1200 ms between attempts
+    await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 700));
   }
 
-  return null;  // failed after max attempts → no infinite loop
+  return null; // Failed after max attempts → no loop forever
 }
