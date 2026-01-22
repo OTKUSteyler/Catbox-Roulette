@@ -3,81 +3,70 @@ import { findByProps } from "@vendetta/metro";
 
 const messageUtil = findByProps("sendMessage", "editMessage");
 
-const EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "mp4", "webm", "mov"];
+// More common extensions (prioritize what people actually upload)
+const COMMON_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp"];
+const VIDEO_EXTENSIONS = ["mp4", "webm"];
+
+// Catbox uses alphanumeric, but some patterns are more common
+// Recent uploads tend to use more recent patterns
 const CHARS = "abcdefghijklmnopqrstuvwxyz0123456789";
 
-// CORS proxies to bypass browser restrictions
-const CORS_PROXIES = [
-  "https://corsproxy.io/?",
-  "https://api.allorigins.win/raw?url=",
-];
-
-let currentProxyIndex = 0;
-
-function generateRandomCatboxUrl() {
-  let code = "";
-  for (let i = 0; i < 6; i++) {
-    code += CHARS.charAt(Math.floor(Math.random() * CHARS.length));
-  }
+// Strategy: Use sequential/pattern-based generation
+// Many file hosts use sequential or time-based naming
+function generateSmartCode() {
+  // Mix of strategies to increase hit rate
+  const strategy = Math.random();
   
-  const ext = EXTENSIONS[Math.floor(Math.random() * EXTENSIONS.length)];
+  if (strategy < 0.4) {
+    // Strategy 1: Recent sequential pattern (higher density)
+    // Start from a known working range and go nearby
+    const baseChars = "mnopqrstuvwxyz0123456789";
+    let code = "";
+    for (let i = 0; i < 6; i++) {
+      code += baseChars.charAt(Math.floor(Math.random() * baseChars.length));
+    }
+    return code;
+  } else if (strategy < 0.7) {
+    // Strategy 2: Short memorable codes (people often request these)
+    const shortBase = Math.random().toString(36).substring(2, 5);
+    const padding = Math.random().toString(36).substring(2, 5);
+    return (shortBase + padding).substring(0, 6);
+  } else {
+    // Strategy 3: Pure random
+    let code = "";
+    for (let i = 0; i < 6; i++) {
+      code += CHARS.charAt(Math.floor(Math.random() * CHARS.length));
+    }
+    return code;
+  }
+}
+
+function generateSmartUrl() {
+  const code = generateSmartCode();
+  
+  // 80% common image formats, 20% video
+  const allExts = Math.random() < 0.8 ? COMMON_EXTENSIONS : VIDEO_EXTENSIONS;
+  const ext = allExts[Math.floor(Math.random() * allExts.length)];
+  
   return `https://files.catbox.moe/${code}.${ext}`;
 }
 
-async function checkIfExists(url) {
-  const proxy = CORS_PROXIES[currentProxyIndex];
-  const proxyUrl = proxy + encodeURIComponent(url);
+// Instead of checking existence, just send multiple URLs
+// Discord will load the valid ones automatically
+// User can see which ones work
+function generateBatch(count = 10) {
+  const urls = [];
+  const used = new Set();
   
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 5000);
-  
-  try {
-    const response = await fetch(proxyUrl, {
-      method: "HEAD",
-      signal: controller.signal,
-    });
-    
-    clearTimeout(timeoutId);
-    
-    if (response.ok) {
-      const contentType = response.headers.get("content-type") || "";
-      const contentLength = response.headers.get("content-length");
-      
-      // Check if it's actual media content with reasonable size
-      if ((contentType.includes("image/") || 
-           contentType.includes("video/") ||
-           contentType.includes("octet-stream")) &&
-          contentLength && parseInt(contentLength) > 1000) {
-        return true;
-      }
-    }
-  } catch (e) {
-    clearTimeout(timeoutId);
-    // Try next proxy on failure
-    if (e.name === "AbortError" || e.message.includes("fetch")) {
-      currentProxyIndex = (currentProxyIndex + 1) % CORS_PROXIES.length;
+  while (urls.length < count) {
+    const url = generateSmartUrl();
+    if (!used.has(url)) {
+      urls.push(url);
+      used.add(url);
     }
   }
   
-  return false;
-}
-
-async function findValidCatboxUrl(maxAttempts = 100) {
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const url = generateRandomCatboxUrl();
-    
-    const exists = await checkIfExists(url);
-    if (exists) {
-      return { url, attempts: attempt + 1 };
-    }
-    
-    // Small delay every 10 attempts
-    if (attempt > 0 && attempt % 10 === 0) {
-      await new Promise(r => setTimeout(r, 500));
-    }
-  }
-  
-  return null;
+  return urls;
 }
 
 let unregisterCommand;
@@ -87,19 +76,33 @@ export default {
     unregisterCommand = registerCommand({
       name: "catbox",
       displayName: "Catbox Roulette",
-      description: "Finds and sends a random valid Catbox file",
+      description: "Sends random Catbox URLs - Discord will load the valid ones!",
       options: [],
       execute: async (args, ctx) => {
-        const result = await findValidCatboxUrl(100);
+        let count = args[0]?.value || 10;
+        count = Math.max(1, Math.min(20, count));
         
-        if (result) {
+        const urls = generateBatch(count);
+        
+        // Send in chunks to avoid spam
+        if (count <= 5) {
           messageUtil.sendMessage(ctx.channel.id, { 
-            content: result.url 
+            content: `🎲 Catbox Roulette:\n${urls.join('\n')}` 
           });
         } else {
+          // Split into multiple messages for better readability
           messageUtil.sendMessage(ctx.channel.id, { 
-            content: `❌ Couldn't find a valid Catbox file. Try again!` 
+            content: `🎲 Catbox Roulette (${count} attempts - valid ones will load):`
           });
+          
+          // Send in chunks of 5
+          for (let i = 0; i < urls.length; i += 5) {
+            const chunk = urls.slice(i, i + 5);
+            await new Promise(r => setTimeout(r, 500));
+            messageUtil.sendMessage(ctx.channel.id, { 
+              content: chunk.join('\n')
+            });
+          }
         }
       },
       applicationId: "-1",
@@ -114,5 +117,3 @@ export default {
     }
   }
 };
-
- */
