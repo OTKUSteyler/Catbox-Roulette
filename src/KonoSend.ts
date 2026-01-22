@@ -3,7 +3,6 @@ import { findByProps } from "@vendetta/metro";
 import { fetchImage } from "./utils";
 
 const { sendBotMessage } = findByProps("sendBotMessage");
-const messageUtil = findByProps("sendMessage", "editMessage");
 
 let konoSend = registerCommand({
   name: "konoSend",
@@ -37,9 +36,9 @@ let konoSend = registerCommand({
       return;
     }
 
-    // Slash command fix: use sendMessage with nonce instead of returning content
-    const fixNonce = Date.now().toString();
-    messageUtil.sendMessage(ctx.channel.id, { content: imageUrl }, void 0, { nonce: fixNonce });
+    return {
+      content: `${imageUrl}`,
+    };
   },
   // @ts-ignore
   applicationId: "-1",
