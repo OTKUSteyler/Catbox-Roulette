@@ -16,7 +16,7 @@ async function getRandomCatboxLink() {
     }
 
     const ext = EXTENSIONS[Math.floor(Math.random() * EXTENSIONS.length)];
-    const url = `https://files.catbox.moe/\( {code}. \){ext}`;
+    const url = `https://files.catbox.moe/${code}.${ext}`;
 
     try {
       const res = await fetch(url, { method: "HEAD", redirect: "follow" });
